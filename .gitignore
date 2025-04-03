@@ -1,0 +1,4 @@
+.venv_temp/
+chroma_db_data/
+__pycache__/
+*.pyc
