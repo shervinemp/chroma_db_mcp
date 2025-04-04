@@ -35,7 +35,7 @@ def add_memory(
 @mcp.tool()
 def recall_memory(
     query: str,
-    top_k: int = 3,
+    top_k: int = 1,
     filter: dict | None = None,
     collection_name: str = config.DEFAULT_COLLECTION_NAME,
 ) -> list[str]:
@@ -102,7 +102,7 @@ def list_collections() -> list[str]:
 @mcp.tool()
 def recall_memory_with_distance(
     query: str,
-    top_k: int = 3,
+    top_k: int = 1,
     filter: dict | None = None,
     collection_name: str = config.DEFAULT_COLLECTION_NAME,
 ) -> list[tuple[str, float]]:
@@ -113,7 +113,7 @@ def recall_memory_with_distance(
 def recall_memory_hybrid(
     query: str,
     keyword: str = None,
-    top_k: int = 3,
+    top_k: int = 1,
     filter: dict | None = None,
     collection_name: str = config.DEFAULT_COLLECTION_NAME,
 ) -> list[str]:
