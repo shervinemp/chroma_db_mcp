@@ -126,6 +126,11 @@ def grant_privilege() -> bool:
     return decorators.grant_privilege()
 
 
+@mcp.tool()
+def list_collection_ids(collection_name: str) -> list[str]:
+    return tools.list_collection_ids(collection_name)
+
+
 # --- Run the server ---
 if __name__ == "__main__":
     logger.info("Starting Chroma Memory MCP Server...")

@@ -288,6 +288,7 @@ def get_memory_by_id(
         return ""  # Return empty string if no text content
 
 
+@require_privilege
 @handle_errors_as_mcp
 def list_collections() -> list[str]:
     """
@@ -405,3 +406,27 @@ def delete_collection(collection_name: str) -> bool:
     database.chroma_client.delete_collection(name=collection_name)
     logger.info(f"Attempted deletion of collection '{collection_name}'.")
     return True
+
+
+@handle_errors_as_mcp
+def list_collection_ids(collection_name: str) -> list[str]:
+    """
+    Core logic for listing all document IDs in a collection.
+    Returns a list of document IDs.
+    """
+    logger.debug(
+        f"Executing list_collection_ids logic for collection '{collection_name}'"
+    )
+    if not collection_name:
+        raise ValueError("Collection name cannot be empty.")
+
+    memory_collection = database.get_collection(collection_name)
+    results = memory_collection.get(include=[])
+
+    if not results or not results.get("ids"):
+        logger.warning(f"No documents found in collection '{collection_name}'.")
+        return []
+
+    ids = results["ids"]
+    logger.info(f"Retrieved {len(ids)} document IDs from '{collection_name}'.")
+    return ids
