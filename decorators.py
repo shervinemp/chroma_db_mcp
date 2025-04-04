@@ -1,3 +1,4 @@
+from copy import copy
 import logging
 import functools
 from mcp import McpError
@@ -51,8 +52,10 @@ def handle_errors_as_mcp(func):
         except Exception as e:
             logger.exception(f"Error during operation '{func.__name__}': {e}")
             if isinstance(e, McpError):
-                raise e
+                raise
             else:
+                if not hasattr(e, "message"):
+                    e.message = repr(e)
                 raise McpError(e)
 
     return wrapper

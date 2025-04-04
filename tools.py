@@ -212,6 +212,183 @@ def summarize_collection(collection_name: str, query: str = "") -> str:
     return summary
 
 
+@handle_errors_as_mcp
+def update_memory_metadata(
+    doc_id: str,
+    metadata: dict,
+    collection_name: str = config.DEFAULT_COLLECTION_NAME,
+) -> bool:
+    """
+    Core logic for updating the metadata of a memory document.
+    Returns True on success. Raises McpError on failure.
+    """
+    logger.debug(
+        f"Executing update_memory_metadata logic for doc_id '{doc_id}' in collection '{collection_name}'"
+    )
+    if not doc_id:
+        raise ValueError("doc_id cannot be empty.")
+    if not metadata or not isinstance(metadata, dict):
+        raise ValueError("Metadata must be a non-empty dictionary.")
+
+    memory_collection = database.get_collection(collection_name)
+    # Fetch the existing document to preserve the embedding
+    results = memory_collection.get(ids=[doc_id], include=["embeddings"])
+    if not results or not results["embeddings"] or not results["embeddings"][0]:
+        raise ValueError(
+            f"Document with id '{doc_id}' not found in collection '{collection_name}'."
+        )
+
+    embedding = results["embeddings"][0]
+
+    # Update the metadata
+    memory_collection.update(
+        ids=[doc_id],
+        metadatas=[metadata],
+        embeddings=[embedding],  # embeddings must be passed during update
+    )
+
+    logger.info(
+        f"Successfully updated metadata for document '{doc_id}' in '{collection_name}'."
+    )
+    return True
+
+
+@handle_errors_as_mcp
+def get_memory_by_id(
+    doc_id: str, collection_name: str = config.DEFAULT_COLLECTION_NAME
+) -> str:
+    """
+    Core logic for retrieving a memory document by its ID.
+    Returns the document's text content on success, empty string if not found.
+    """
+    logger.debug(
+        f"Executing get_memory_by_id logic for doc_id '{doc_id}' in collection '{collection_name}'"
+    )
+    if not doc_id:
+        raise ValueError("doc_id cannot be empty.")
+
+    memory_collection = database.get_collection(collection_name)
+    results = memory_collection.get(
+        ids=[doc_id], include=["metadatas"]
+    )  # Only fetch metadata
+
+    if not results or not results["metadatas"] or not results["metadatas"][0]:
+        logger.warning(
+            f"Document with id '{doc_id}' not found in collection '{collection_name}'."
+        )
+        return ""  # Return empty string if not found
+
+    metadata = results["metadatas"][0][0]  # Access the first document's metadata
+    if metadata and "original_text" in metadata:
+        return metadata["original_text"]
+    else:
+        logger.warning(
+            f"No text content found for document '{doc_id}' in collection '{collection_name}'."
+        )
+        return ""  # Return empty string if no text content
+
+
+@handle_errors_as_mcp
+def list_collections() -> list[str]:
+    """
+    Core logic for listing all collections in ChromaDB.
+    Returns a list of collection names.
+    """
+    logger.debug("Executing list_collections logic")
+    return database.chroma_client.list_collections()
+
+
+@handle_errors_as_mcp
+def recall_memory_with_distance(
+    query: str,
+    top_k: int = 3,
+    filter: dict | None = None,
+    collection_name: str = config.DEFAULT_COLLECTION_NAME,
+) -> list[tuple[str, float]]:
+    """
+    Core logic for recalling relevant memory documents and their distances.
+    Returns a list of tuples, where each tuple contains the text and the distance.
+    """
+    logger.debug(
+        f"Executing recall_memory_with_distance logic for collection '{collection_name}'"
+    )
+    if not query:
+        raise ValueError("Query cannot be empty.")
+
+    memory_collection = database.get_collection(collection_name)
+    query_embedding = llm_utils.generate_embedding(query, task_type="RETRIEVAL_QUERY")
+
+    results = memory_collection.query(
+        query_embeddings=[query_embedding],
+        n_results=top_k,
+        where=filter,
+        include=["metadatas", "distances"],
+    )
+
+    retrieved_texts = []
+    if (
+        results
+        and results.get("metadatas")
+        and results.get("distances")
+        and len(results["metadatas"]) > 0
+    ):
+        for i, metadata_item in enumerate(results["metadatas"][0]):
+            if metadata_item and "original_text" in metadata_item:
+                text = metadata_item["original_text"]
+                distance = results["distances"][0][i]
+                retrieved_texts.append((text, distance))
+
+    logger.info(
+        f"Retrieved {len(retrieved_texts)} relevant text chunks from '{collection_name}'."
+    )
+    return retrieved_texts
+
+
+@handle_errors_as_mcp
+def recall_memory_hybrid(
+    query: str,
+    keyword: str = None,
+    top_k: int = 3,
+    filter: dict | None = None,
+    collection_name: str = config.DEFAULT_COLLECTION_NAME,
+) -> list[str]:
+    """
+    Core logic for recalling relevant memory documents using hybrid search (vector + keyword).
+    Returns a list of texts.
+    """
+    logger.debug(
+        f"Executing recall_memory_hybrid logic for collection '{collection_name}'"
+    )
+    if not query:
+        raise ValueError("Query cannot be empty.")
+
+    memory_collection = database.get_collection(collection_name)
+    query_embedding = llm_utils.generate_embedding(query, task_type="RETRIEVAL_QUERY")
+
+    # Basic hybrid search (can be improved with more sophisticated techniques)
+    results = memory_collection.query(
+        query_embeddings=[query_embedding],
+        n_results=top_k,
+        where=filter,
+        include=["metadatas"],
+    )
+
+    retrieved_texts = []
+    if results and results.get("metadatas") and len(results["metadatas"]) > 0:
+        for metadata_item in results["metadatas"][0]:
+            if metadata_item and "original_text" in metadata_item:
+                text = metadata_item["original_text"]
+                if (
+                    keyword is None or keyword.lower() in text.lower()
+                ):  # Basic keyword filter
+                    retrieved_texts.append(text)
+
+    logger.info(
+        f"Retrieved {len(retrieved_texts)} relevant text chunks from '{collection_name}'."
+    )
+    return retrieved_texts
+
+
 @require_privilege
 @handle_errors_as_mcp
 def delete_collection(collection_name: str) -> bool:
